@@ -2,7 +2,7 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2020.03.16b",
+  VERSION       = "2020.03.18",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -1029,9 +1029,9 @@ local CC = {   -- command class object
     updater = nil,      -- shared with CC#48 (see below)
 
     files = { "D_DoorSensor1.xml", SID.SecuritySensor, "D_DoorSensor1.json",
-  --  1	"Smoke"
-  --	2	"CO"     -- "D_SmokeSensor1.xml"
-  --	3	"CO2"    -- "D_SmokeCoSensor1.json"
+        ["1"] = { "D_SmokeSensor1.xml", nil, "D_SmokeSensor1.json" }         -- "Smoke"
+      	["2"] =	{ "D_SmokeSensor1.xml", nil, "D_COSensor1.json" }            -- "CO"
+      	["3"]	= { "D_SmokeSensor1.xml", nil, "D_COSensor1.json" }            -- "CO2"
   --	4	"Heat"
         ["5"] = { "D_FloodSensor1.xml",  nil, "D_FloodSensor1.json" },    -- "Water"
         ["6"] = { "D_DoorSensor1.xml",   nil, "D_DoorSensor1.json" },     -- "Access Control"
@@ -1039,9 +1039,7 @@ local CC = {   -- command class object
   --	8	"Power"
   --	9	"System"
   --  10 "Emergency"
-  --	11 "Tilt"
-  --	12 "Motion"
-  --]]
+  --	11 "Clock"
     },
   },
 
@@ -1567,15 +1565,17 @@ local function updateChildren (vDevs)
     local dev = luup.devices[dno]
     local status = state and 2 or -1
     local message = state and state .. " failed" or ''
-    dev: status_set (status, message)
-    if state then
-      dev: variable_set (SID.HaDevice, "CommFailure", 1)
-      dev: variable_set (SID.HaDevice, "CommFailureTime", os.time())
-    else
-      dev: variable_set (SID.HaDevice, "CommFailure", 0)
-    end		
+    local old = luup.attr_get("status",dev)
+    if status ~= tonumber(old) then
+      dev: status_set (status, message)
+      if state then
+        dev: variable_set (SID.HaDevice, "CommFailure", 1)
+        dev: variable_set (SID.HaDevice, "CommFailureTime", os.time())
+      else
+        dev: variable_set (SID.HaDevice, "CommFailure", 0)
+      end
+    end
   end
-
 end
 
 
