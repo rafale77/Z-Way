@@ -833,7 +833,7 @@ local CC = {   -- command class object
         --	7	"Freeze"
         --	8	"Tamper"
         --	9	"Aux"
-	["10"] = { "D_DoorSensor1.xml" },                               --	10	"Door/Window"
+	      ["10"] = { "D_DoorSensor1.xml" },                               --	10	"Door/Window"
         --	11	"Tilt"
         --	12	"Motion"
         --	13	"Glass Break"
@@ -855,7 +855,7 @@ local CC = {   -- command class object
         setVar (var, value, meta.service, d)
       end,
 
-      files = {  "D_GenericSensor1.xml", SID.GenericSensor,    -- generic values for any unknown
+      files = { "D_GenericSensor1.xml", SID.GenericSensor,    -- generic values for any unknown
           ["1"]  = { "D_TemperatureSensor1.xml",  SID.TemperatureSensor },    -- scale: {"C","F"}
           ["2"]  = { "D_GenericSensor1.xml",      SID.GenericSensor },        -- scale: {"","%"}
           ["3"]  = { "D_LightSensor1.xml",        SID.LightSensor},           -- scale: {"%","Lux"}
@@ -1007,7 +1007,7 @@ local CC = {   -- command class object
     updater = function (d, inst)
       local status = open_or_close (inst.metrics.level)
       setVar ("Status", status, SID.DoorLock, d)
-      setVar ("Tripped", status, SID.SecuritySensor, d)  -- AlarmTripped and LastTripped managed by openluup
+      setVar ("Tripped", status, SID.SecuritySensor, d)   -- AlarmTripped and LastTripped managed by openluup
     end,
 
     files = { "D_DoorLock1.xml",   SID.DoorLock },
@@ -1307,7 +1307,7 @@ local function configureDevice (id, name, ldv, child)
 
   elseif ((classes["37"] and #classes["37"] == 1)             -- ... just one switch
   or      (classes["38"] and #classes["38"] == 1) ) then         -- ... OR just one dimmer
-    if not classes["49"] and not classes ["113"] then             -- ...either no sensors
+    if not classes["49"] and not classes ["113"] then             -- either NO sensors
       local v = (classes["38"] or empty)[1] or classes["37"][1]
       upnp_file, json_file, name = add_updater(v)
     else
@@ -1318,13 +1318,12 @@ local function configureDevice (id, name, ldv, child)
        child[v.meta.altid] = true                            -- force child creation
       for _, v in ipairs (classes["113"] or empty) do    -- add motion sensors
         if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then         -- not a tamper switch or low battery notification
-          v.meta.upnp_file = DEV.motion
-          types["Alarm"] = (types["Alarm"] or 0) + 1
           child[v.meta.altid] = true                            -- force child creation
         end
       end
       luup.variable_set (SID.AltUI, "DisplayLine1", display_classes (classes), id)
     end
+
   elseif classes["48"] and #classes["48"] == 1                -- ... just one alarm
   and not classes["49"] then                                  -- ...and no sensors
 --  and    classes["49"] and #classes["49"] <= 1 then           -- ...and max only one sensor
@@ -1360,7 +1359,6 @@ local function configureDevice (id, name, ldv, child)
       end
     end
     for _, v in ipairs (classes["48"] or empty) do    -- add motion sensors
-      v.meta.upnp_file = DEV.motion
       child[v.meta.altid] = true                            -- force child creation
     end
     for _, v in ipairs (classes["113"] or empty) do    -- add motion sensors
