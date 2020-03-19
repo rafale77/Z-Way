@@ -2,7 +2,7 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2020.03.18",
+  VERSION       = "2020.03.19",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -122,11 +122,12 @@ local function ZWayVDev_API (ip, sid)
   end
 
   local function authenticate (user, password)
+    cookie = nil      -- invalidate old one, whatever
     local url = "http://%s:8083/ZAutomation/api/v1/login"
     local data = json.encode {login=user, password = password}
     local _, j = HTTP_request_json (url: format (ip), data)
     local sid = j and j.data and j.data.sid
-    cookie = sid and "ZWAYSession=" .. sid or nil   -- invalidate old one, whatever
+    cookie = sid and "ZWAYSession=" .. sid or nil
     return sid, j
   end
 
@@ -655,7 +656,7 @@ SRV.HVAC_UserOperatingMode = {
       local cmd = VtoZ[value]
       Z.zwcommand(id, inst, cc, cmd)
       luup.variable_set (sid, "ModeTarget", value, d)
-      luup.variable_set (sid, "ModeStatus", value, d)
+      luup.variable_set (sid, "ModeStatus", value, d)   -- assume it get set... can't read back!
     end
   end,
         --	Off,Heat,Cool,Auto,Auxiliary,Resume,Fan Only,Furnace,Dry Air,Moist Air,Auto Change Over,
@@ -759,7 +760,6 @@ local CC = {   -- command class object
       -- scene controller
       if dev.attributes.device_file == DEV.controller then
         local click = inst.updateTime
-        --      setVar ("LastUpdate_" .. meta.altid, click, SID.ZWay, d)
         if click ~= meta.click then -- force variable updates
           local scene = meta.scale
           local time  = os.time()     -- "◷" == json.decode [["\u25F7"]]
@@ -1029,10 +1029,10 @@ local CC = {   -- command class object
     updater = nil,      -- shared with CC#48 (see below)
 
     files = { "D_DoorSensor1.xml", SID.SecuritySensor, "D_DoorSensor1.json",
-	["1"] = { "D_SmokeSensor1.xml", nil, "D_SmokeSensor1.json" },     -- "Smoke"
+	      ["1"] = { "D_SmokeSensor1.xml", nil, "D_SmokeSensor1.json" },     -- "Smoke"
       	["2"] =	{ "D_SmokeSensor1.xml", nil, "D_COSensor1.json" },        -- "CO"
       	["3"]	= { "D_SmokeSensor1.xml", nil, "D_COSensor1.json" },      -- "CO2"
-  --	4	"Heat"
+--        ["4"] = { "D_HeatSensor1.xml",   nil, "D_HeatSensor1.json"   },     --	"Heat"
         ["5"] = { "D_FloodSensor1.xml",  nil, "D_FloodSensor1.json" },    -- "Water"
         ["6"] = { "D_DoorSensor1.xml",   nil, "D_DoorSensor1.json" },     -- "Access Control"
         ["7"] = { "D_MotionSensor1.xml", nil, "D_MotionSensor1.json" },   -- "Tamper or generic motion"
@@ -1082,16 +1082,22 @@ local CC = {   -- command class object
 CC ["113"].updater = CC ["48"].updater      -- alarm
 CC ["156"].updater = CC ["48"].updater      -- tamper switch (deprecated)
 
+    files =  { "D_SceneControllerLED1.xml", SID.SceneControllerLED, "D_SceneControllerLED1.json"},
+  },
 
-----------------------------------------------------
+  ["152"] = {
+    updater = function () end,
 
--- DEVICES
+    files = { "D_MotionSensor1.xml", SID.SecuritySensor },
+  },
 
--- use Device maps to lookup Vera category, hence device type...
--- ...and from the device file we can then get services...
--- ...and from the service files, the actions and variables.
---
+  -- deprecated alarm
+  ["156"] = {
+    updater = nil,      -- shared with CC#48 (see below)
 
+--    files = { "D_FloodSensor1.xml", SID.SecuritySensor, "D_FloodSensor1.json" },
+    files = { "D_MotionSensor1.xml", SID.SecuritySensor },
+  },
 
 --[[
 
@@ -1177,16 +1183,14 @@ end
 
 local function createZwaveDevice (parent, id, name, altid, upnp_file, json_file, room)
   local dev = chdev.create {
-    devNo = id,                         -- place device into bridge block
+    devNo = id,
     internal_id = altid,                -- ZWave node number (string)
     description = name,
     upnp_file = upnp_file,
     json_file = json_file,
     parent = parent,
     room = room,
---    statevariables = vars,        --NB. NOT the string "service,variable=value\nservice..."
   }
-  dev.handle_children = true      -- ensure that any child devices are handled
   luup.devices[id] = dev          -- add to Luup devices
   return dev
 end
@@ -1229,6 +1233,26 @@ local function index_by_command_class (vDevs)
   classes.n  = n    -- total WITHOUT uncounted classes
   return classes
 end
+
+-- build text for combo devices
+local function display_classes (classes)
+  local types = {}
+  local ignored = {n=true, ["0"]=true, ["128"]=true}
+  for cc, class in pairs (classes) do
+    if not ignored[cc] then
+      for _, v in ipairs (class) do
+        local ctype = v.meta.devtype or "CC" .. cc
+        types[ctype] = (types[ctype] or 0) + 1
+      end
+    end
+  end
+  local display = {}
+  for s in pairs (types) do display[#display+1] = s end
+  table.sort(display)
+  for i,s in ipairs (display) do display[i] = table.concat {s,':',types[s], ' '} end
+  return table.concat (display)
+end
+
 
 ---  CONFIGURE DEVICES
 -- optional child parameters forces new vDev children
@@ -1345,11 +1369,9 @@ local function configureDevice (id, name, ldv, child)
   elseif classes["49"]  then                              -- a multi-sensor combo
     local meta = classes["49"][1].meta
     name = table.concat {"multi #", meta.node, '-', meta.instance}
-    local types = {}
     for _, v in ipairs (classes["49"]) do
       local scale = v.meta.devtype
       if scale then
-        types[scale] = (types[scale] or 0) + 1
         child[v.meta.altid] = true                            -- force child creation
       end
     end
@@ -1360,16 +1382,10 @@ local function configureDevice (id, name, ldv, child)
     end
     for _, v in ipairs (classes["113"] or empty) do    -- add motion sensors
       if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then         -- not a tamper switch or low battery notification
-        v.meta.upnp_file = DEV.motion
-        types["Alarm"] = (types["Alarm"] or 0) + 1
         child[v.meta.altid] = true                            -- force child creation
       end
     end
-    local display = {}
-    for s in pairs (types) do display[#display+1] = s end
-    table.sort(display)
-    for i,s in ipairs (display) do display[i] = table.concat {s,':',types[s], ' '} end
-    luup.variable_set (SID.AltUI, "DisplayLine1", table.concat (display), id)
+    luup.variable_set (SID.AltUI, "DisplayLine1", display_classes (classes), id)
 
   elseif classes["113"] and #classes["113"] > 1 then   -- sensor with tamper @rafale77
     local v = classes["113"][1]
@@ -1377,6 +1393,7 @@ local function configureDevice (id, name, ldv, child)
       upnp_file, json_file, name = add_updater(v)
     end
   end
+
   -- power meter service variables (for any device)
   if classes["50"] then
     for _, meter in ipairs (classes["50"]) do
@@ -1450,7 +1467,7 @@ local function createChildren (bridgeDevNo, vDevs, room, OFFSET)
       dev = createZwaveDevice (parent, id, name, altid, upnp_file, json_file, room)
     end
     dev.handle_children = true                              -- ensure that any child devices are handled
-    dev.attributes.host = "Z-Way"                           -- flag as a Z-Way hosted device
+    dev.attributes.host = "Z-Way"                           -- flag as Z-Way hosted device [+luup.variable_set()]
     if CLONEROOMS then dev: rename (nil, room) end          -- force to given room name
     if dev.room_num == 101 then dev: rename (nil, room) end -- ensure it's not in Room 101!!
     list[#list+1] = id   -- add to new list
@@ -1565,17 +1582,15 @@ local function updateChildren (vDevs)
     local dev = luup.devices[dno]
     local status = state and 2 or -1
     local message = state and state .. " failed" or ''
-    local old = luup.attr_get("status",dev)
-    if status ~= tonumber(old) then
-      dev: status_set (status, message)
-      if state then
-        dev: variable_set (SID.HaDevice, "CommFailure", 1)
-        dev: variable_set (SID.HaDevice, "CommFailureTime", os.time())
-      else
-        dev: variable_set (SID.HaDevice, "CommFailure", 0)
-      end
+    dev: status_set (status, message)
+
+    local commfail = getVar ("CommFailure", SID.HaDevice, dno)    -- set CommFailure for @rafale77
+    local newfail = state and '1' or '0'
+    if commfail ~= newfail then
+      dev: variable_set (SID.HaDevice, "CommFailure", newfail)
     end
   end
+
 end
 
 
