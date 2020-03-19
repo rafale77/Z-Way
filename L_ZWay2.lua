@@ -1029,9 +1029,9 @@ local CC = {   -- command class object
     updater = nil,      -- shared with CC#48 (see below)
 
     files = { "D_DoorSensor1.xml", SID.SecuritySensor, "D_DoorSensor1.json",
-        ["1"] = { "D_SmokeSensor1.xml", nil, "D_SmokeSensor1.json" }         -- "Smoke"
-      	["2"] =	{ "D_SmokeSensor1.xml", nil, "D_COSensor1.json" }            -- "CO"
-      	["3"]	= { "D_SmokeSensor1.xml", nil, "D_COSensor1.json" }            -- "CO2"
+	["1"] = { "D_SmokeSensor1.xml", nil, "D_SmokeSensor1.json" },     -- "Smoke"
+      	["2"] =	{ "D_SmokeSensor1.xml", nil, "D_COSensor1.json" },        -- "CO"
+      	["3"]	= { "D_SmokeSensor1.xml", nil, "D_COSensor1.json" },      -- "CO2"
   --	4	"Heat"
         ["5"] = { "D_FloodSensor1.xml",  nil, "D_FloodSensor1.json" },    -- "Water"
         ["6"] = { "D_DoorSensor1.xml",   nil, "D_DoorSensor1.json" },     -- "Access Control"
