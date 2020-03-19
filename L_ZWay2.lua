@@ -855,7 +855,7 @@ local CC = {   -- command class object
         setVar (var, value, meta.service, d)
       end,
 
-      files = {  -- SensorMultilevel: no default device or service
+      files = {  "D_GenericSensor1.xml", SID.GenericSensor,    -- generic values for any unknown
           ["1"]  = { "D_TemperatureSensor1.xml",  SID.TemperatureSensor },    -- scale: {"C","F"}
           ["2"]  = { "D_GenericSensor1.xml",      SID.GenericSensor },        -- scale: {"","%"}
           ["3"]  = { "D_LightSensor1.xml",        SID.LightSensor},           -- scale: {"%","Lux"}
@@ -1007,7 +1007,7 @@ local CC = {   -- command class object
     updater = function (d, inst)
       local status = open_or_close (inst.metrics.level)
       setVar ("Status", status, SID.DoorLock, d)
-      setVar ("Tripped", status, SID.SecuritySensor, d)
+      setVar ("Tripped", status, SID.SecuritySensor, d)  -- AlarmTripped and LastTripped managed by openluup
     end,
 
     files = { "D_DoorLock1.xml",   SID.DoorLock },
@@ -1080,6 +1080,12 @@ local CC = {   -- command class object
 
 CC ["113"].updater = CC ["48"].updater      -- alarm
 CC ["156"].updater = CC ["48"].updater      -- tamper switch (deprecated)
+
+
+----------------------------------------------------
+--
+-- DEVICES
+--
 
 --[[
 
@@ -1301,7 +1307,7 @@ local function configureDevice (id, name, ldv, child)
 
   elseif ((classes["37"] and #classes["37"] == 1)             -- ... just one switch
   or      (classes["38"] and #classes["38"] == 1) ) then         -- ... OR just one dimmer
-    if not classes["49"] and not classes ["113"] then             -- ...but NOT any sensors
+    if not classes["49"] and not classes ["113"] then             -- ...either no sensors
       local v = (classes["38"] or empty)[1] or classes["37"][1]
       upnp_file, json_file, name = add_updater(v)
     else
@@ -1317,11 +1323,7 @@ local function configureDevice (id, name, ldv, child)
           child[v.meta.altid] = true                            -- force child creation
         end
       end
-      local display = {}
-      for s in pairs (types) do display[#display+1] = s end
-      table.sort(display)
-      for i,s in ipairs (display) do display[i] = table.concat {s,':',types[s], ' '} end
-      luup.variable_set (SID.AltUI, "DisplayLine1", table.concat (display), id)
+      luup.variable_set (SID.AltUI, "DisplayLine1", display_classes (classes), id)
     end
   elseif classes["48"] and #classes["48"] == 1                -- ... just one alarm
   and not classes["49"] then                                  -- ...and no sensors
