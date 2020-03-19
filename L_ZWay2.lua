@@ -824,16 +824,16 @@ local CC = {   -- command class object
     end,
 
     files = { "D_MotionSensor1.xml", SID.SecuritySensor,        -- SensorBinary
-        ["1"] = { nil, nil, "D_GlassBreakSensorWithTamper.json" },      --	1	"Glass Break"
+        ["1"] = { nil, nil, "D_GlassBreakSensorWithTamper.json" },      --	1 "Glass Break"
         ["2"] = {"D_SmokeSensor1.xml"},                                 --	2 "Smoke"
-        ["3"] = {"D_SmokeSensor1.xml", nil, "D_SmokeCoSensor1.json"},   --	3	"CO"
+        ["3"] = {"D_SmokeSensor1.xml", nil, "D_SmokeCoSensor1.json"},   --	3 "CO"
         --	4	"CO2"
         --	5	"Heat"
-        ["6"] = { "D_FloodSensor1.xml", nil, "D_FloodSensor1.json" }, --	6	"Water"
+        ["6"] = { "D_FloodSensor1.xml", nil, "D_FloodSensor1.json" },   --	6 "Water"
         --	7	"Freeze"
         --	8	"Tamper"
         --	9	"Aux"
-        ["10"] = { "D_DoorSensor1.xml" }, --	10	"Door/Window"
+	["10"] = { "D_DoorSensor1.xml" },                               --	10	"Door/Window"
         --	11	"Tilt"
         --	12	"Motion"
         --	13	"Glass Break"
@@ -1029,7 +1029,7 @@ local CC = {   -- command class object
     updater = nil,      -- shared with CC#48 (see below)
 
     files = { "D_DoorSensor1.xml", SID.SecuritySensor, "D_DoorSensor1.json",
-	      ["1"] = { "D_SmokeSensor1.xml", nil, "D_SmokeSensor1.json" },     -- "Smoke"
+        ["1"] = { "D_SmokeSensor1.xml", nil, "D_SmokeSensor1.json" },     -- "Smoke"
       	["2"] =	{ "D_SmokeSensor1.xml", nil, "D_COSensor1.json" },        -- "CO"
       	["3"]	= { "D_SmokeSensor1.xml", nil, "D_COSensor1.json" },      -- "CO2"
 --        ["4"] = { "D_HeatSensor1.xml",   nil, "D_HeatSensor1.json"   },     --	"Heat"
@@ -1078,26 +1078,8 @@ local CC = {   -- command class object
 
 }
 
-
 CC ["113"].updater = CC ["48"].updater      -- alarm
 CC ["156"].updater = CC ["48"].updater      -- tamper switch (deprecated)
-
-    files =  { "D_SceneControllerLED1.xml", SID.SceneControllerLED, "D_SceneControllerLED1.json"},
-  },
-
-  ["152"] = {
-    updater = function () end,
-
-    files = { "D_MotionSensor1.xml", SID.SecuritySensor },
-  },
-
-  -- deprecated alarm
-  ["156"] = {
-    updater = nil,      -- shared with CC#48 (see below)
-
---    files = { "D_FloodSensor1.xml", SID.SecuritySensor, "D_FloodSensor1.json" },
-    files = { "D_MotionSensor1.xml", SID.SecuritySensor },
-  },
 
 --[[
 
