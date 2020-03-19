@@ -1361,7 +1361,6 @@ local function configureDevice (id, name, ldv, child)
     end
     for _, v in ipairs (classes["48"] or empty) do    -- add motion sensors
       v.meta.upnp_file = DEV.motion
-      types["Alarm"] = (types["Alarm"] or 0) + 1
       child[v.meta.altid] = true                            -- force child creation
     end
     for _, v in ipairs (classes["113"] or empty) do    -- add motion sensors
