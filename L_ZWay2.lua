@@ -1054,6 +1054,7 @@ local CC = {   -- command class object
       local level = tonumber (inst.metrics.level)
       local warning = (level < 10) and "1" or "0"
       setVar ("BatteryLevel", level, SID.HaDevice, d)
+      setVar ("BatteryDate", inst.updateTime, SID.HaDevice, d)			
       setVar ("sl_BatteryAlarm", warning, SID.HaDevice, d)
     end,
 
