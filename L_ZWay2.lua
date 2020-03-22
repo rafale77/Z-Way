@@ -820,11 +820,8 @@ local CC = {   -- command class object
       local armed = getVar ("Armed", sid, d)
       setVar ("Tripped", tripped, sid, d)
       if tripped == "1" and tripped ~= old then setVar ("LastTrip", os.time(), sid, d) end
-      if armed == "1" and tripped == "1" then
-        setVar ("ArmedTripped", "1" , sid, d)
-      else
-        setVar ("ArmedTripped", "0" , sid, d)
-      end
+      if armed == "1" and tripped == "1" then local armtrip = true end		
+      setVar ("ArmedTripped", armtrip and "1" or "0" , sid, d)
     end,
 
     files = { "D_MotionSensor1.xml", SID.SecuritySensor,        -- SensorBinary
