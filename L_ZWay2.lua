@@ -23,7 +23,7 @@ ABOUT = {
   See the License for the specific language governing permissions and
   limitations under the License.
 ]]
-}v
+}
 
 -- 2017.10.03  added test_from_file function
 
