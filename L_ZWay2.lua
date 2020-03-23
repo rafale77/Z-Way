@@ -2,7 +2,7 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2020.03.21",
+  VERSION       = "2020.03.23",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -23,7 +23,7 @@ ABOUT = {
   See the License for the specific language governing permissions and
   limitations under the License.
 ]]
-}
+}v
 
 -- 2017.10.03  added test_from_file function
 
@@ -46,6 +46,7 @@ ABOUT = {
 -- 2020.03.11  add SendData action (thanks @DesT), fix nil setpoint serviceId
 -- 2020.03.12  complete restructure in progress...
 -- 2020.03.16  continued refactoring ... including asynchronous HTTP requests
+-- 2020.03.23  improve thermostat recognition (thanks @ronluna)
 
 
 local json    = require "openLuup.json"
@@ -73,7 +74,7 @@ end
 --
 
 
-local function ZWayVDev_API (ip, sid)
+local function ZWayAPI (ip, sid)
 
   local cookie = "ZWAYSession=" .. (sid or '')
 --    local ok, err = async.request (url, VeraBridge_async_callback)
@@ -189,6 +190,21 @@ local function ZWayVDev_API (ip, sid)
     authenticate  = authenticate,
 
     async_request = async_request,    -- ditto, asynchronous
+
+    -- Z-Wave Device API
+    zDevAPI = {
+        controller = function ()
+          local status, response = request "/ZWaveAPI/Run/zway.controller"
+          return status, json.decode (response)
+        end,
+      },
+
+    -- Virtual Device API
+    vDevAPI = {},
+
+    -- JavaScript API
+    JSAPI = {},
+
   }
 end
 
@@ -197,7 +213,7 @@ end
 -- DUMMY Z-WayVDev() API, for testing from file
 --
 
-local function ZWayVDev_DUMMY_API (filename)
+local function ZWayDummyAPI (filename)
   local function noop() end
   local f = assert (io.open (filename), "TEST filename not found")
   local J = f: read "*a"
@@ -818,9 +834,10 @@ local CC = {   -- command class object
       local tripped = on_or_off (inst.metrics.level)
       local old = getVar ("Tripped", sid, d)
       local armed = getVar ("Armed", sid, d)
+      local armtrip = false
       setVar ("Tripped", tripped, sid, d)
       if tripped == "1" and tripped ~= old then setVar ("LastTrip", os.time(), sid, d) end
-      if armed == "1" and tripped == "1" then local armtrip = true end		
+      if armed == "1" and tripped == "1" then armtrip = true end
       setVar ("ArmedTripped", armtrip and "1" or "0" , sid, d)
     end,
 
@@ -969,7 +986,7 @@ local CC = {   -- command class object
   ["66"] = {
     updater = function () end,
 
-  files = { nil, SID.HVAC_OperatingState },
+  files = { "D_HVAC_ZoneThermostat1.xml", SID.HVAC_OperatingState },
   },
 
   ["67"] = {
@@ -987,7 +1004,7 @@ local CC = {   -- command class object
       end
     end,
 
-  files = { nil, SID.TemperatureSetpoint, -- Setpoint
+  files = { "D_HVAC_ZoneThermostat1.xml", SID.TemperatureSetpoint, -- Setpoint
       ["1"]  = { nil, SID.TemperatureSetpoint1_Heat },
       ["2"]  = { nil, SID.TemperatureSetpoint1_Cool },
     },
@@ -1030,7 +1047,7 @@ local CC = {   -- command class object
   ["113"] = {
     updater = nil,      -- shared with CC#48 (see below)
 
-    files = { "D_DoorSensor1.xml", SID.SecuritySensor, "D_DoorSensor1.json",
+    files = { "D_MotionSensor1.xml", SID.SecuritySensor,
         ["1"] = { "D_SmokeSensor1.xml", nil, "D_SmokeSensor1.json" },     -- "Smoke"
       	["2"] =	{ "D_SmokeSensor1.xml", nil, "D_COSensor1.json" },        -- "CO"
       	["3"]	= { "D_SmokeSensor1.xml", nil, "D_COSensor1.json" },      -- "CO2"
@@ -1051,7 +1068,7 @@ local CC = {   -- command class object
       local level = tonumber (inst.metrics.level)
       local warning = (level < 10) and "1" or "0"
       setVar ("BatteryLevel", level, SID.HaDevice, d)
-      setVar ("BatteryDate", inst.updateTime, SID.HaDevice, d)			
+      setVar ("BatteryDate", inst.updateTime, SID.HaDevice, d)
       setVar ("sl_BatteryAlarm", warning, SID.HaDevice, d)
     end,
 
@@ -1076,7 +1093,7 @@ local CC = {   -- command class object
   ["156"] = {
     updater = nil,      -- shared with CC#48 (see below)
 
-    files = { "D_FloodSensor1.xml", SID.SecuritySensor, "D_FloodSensor1.json" },
+    files = { "D_MotionSensor1.xml", SID.SecuritySensor },
   },
 
 }
@@ -1280,12 +1297,14 @@ local function configureDevice (id, name, ldv, child)
     end
     upnp_file, json_file, name = add_updater (vDev)                    -- create specific updater
 
-  elseif classes["64"] and classes["67"] and classes["49"] then    -- a thermostat
+  elseif (classes["64"] or classes["67"]) and classes["49"] then    -- a thermostat
     -- may have temp sensor [49], fan speed [68], setpoints [67], ...
     -- ... operating state, operating mode, energy metering, ...
     -- command_class ["68"] Fan_mode
-    local tstat = classes["64"][1]
-    upnp_file, json_file, name = add_updater (tstat)
+    local c64 = classes["64"]
+    if c64 then local tstat = c64[1]
+      upnp_file, json_file, name = add_updater (tstat)
+    end
     local ops = classes["66"]  -- operating state
     if ops then
       add_updater(ops[1])
@@ -1308,26 +1327,42 @@ local function configureDevice (id, name, ldv, child)
 --    upnp_file = DEV.rgb
 --    name = "rgb #" .. id
 
+
   elseif ((classes["37"] and #classes["37"] == 1)             -- ... just one switch
   or      (classes["38"] and #classes["38"] == 1) ) then         -- ... OR just one dimmer
-    if not classes["49"] and not classes ["113"] then             -- either NO sensors
-      local v = (classes["38"] or empty)[1] or classes["37"][1]
-      upnp_file, json_file, name = add_updater(v)
-    else
-      -- or multi WITH sensors		    else
-      -- @rafale77, pill request #17 was for DesT’s GE combo device
-      -- a light switch with a motion sensor…
-      -- It was reporting two additional instances which don’t appear to be functional.
-      local meta = (classes["38"] or classes["37"]) [1] .meta
-      name = table.concat {"switch+ #", meta.node, '-', meta.instance}
-      child[meta.altid] = true                            -- force child creation
-      for _, v in ipairs (classes["113"] or empty) do    -- add motion sensors
-        if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then         -- not tamper switch or low battery notification
-          child[v.meta.altid] = true                            -- force child creation
-        end
-      end
-      luup.variable_set (SID.AltUI, "DisplayLine1", display_classes (classes), id)
+------------------------------------
+--    if not classes["49"] and not classes ["113"] then             -- either NO sensors
+--      local v = (classes["38"] or empty)[1] or classes["37"][1]
+--      upnp_file, json_file, name = add_updater(v)
+--    else
+--      -- or WITH sensors
+--      -- @rafale77, pull request #17 was for DesT’s GE combo device
+--      -- a light switch with a motion sensor…
+--      -- It was reporting two additional instances which don’t appear to be functional.
+--      local meta = (classes["38"] or classes["37"]) [1] .meta
+--      name = table.concat {"switch+ #", meta.node, '-', meta.instance}
+--      child[meta.altid] = true                            -- force child creation
+--      for _, v in ipairs (classes["113"] or empty) do    -- add motion sensors
+--        if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then         -- not tamper switch or low battery notification
+--          child[v.meta.altid] = true                            -- force child creation
+--        end
+--      end
+--      luup.variable_set (SID.AltUI, "DisplayLine1", display_classes (classes), id)
+--    end
+------------------------------------
+
+    -- 2020.03.23 @akbooer represent as switch/dimmer rather than multi-sensor
+    local w = (classes["38"] or classes["37"])[1]
+    upnp_file, json_file, name = add_updater(w)                 -- add main device
+    for _, v in ipairs (classes["49"] or empty) do              -- add multi-level sensors
+      child[v.meta.altid] = true                                -- force child creation
     end
+    for _, v in ipairs (classes["113"] or empty) do             -- add motion sensors
+      if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then   -- not tamper switch or low battery notification
+        child[v.meta.altid] = true                              -- force child creation
+      end
+    end
+------------------------------------
 
   elseif classes["48"] and #classes["48"] == 1                -- ... just one alarm
   and not classes["49"] then                                  -- ...and no sensors
@@ -1702,6 +1737,8 @@ end
 -- Z-Way()  STARTUP
 --
 
+
+
 function init (lul_device)
 	devNo = tonumber (lul_device)
 
@@ -1732,25 +1769,33 @@ function init (lul_device)
   setVar ("Offset", OFFSET)
 
   -- Authenticate
+  local Remote_ID = 31415926
+
   do
     local testfile = uiVar ("Test_JSON_File", '')
     if testfile ~= '' then
-      Z = ZWayVDev_DUMMY_API (testfile)
+      Z = ZWayDummyAPI (testfile)
       ASYNCPOLL = false                       -- dummy API has no async mode
     else
       local session = getVar "ZWAYSession"
-      Z = ZWayVDev_API (ip, session)
+      Z = ZWayAPI (ip, session)
+      -- get homeId
+      local _, id = Z.zDevAPI.controller()
+      id = id.data.homeId.value
+      id = ("%8x"): format (id < 0 and 2^31-id or id)
+      _log ("HomeId: " .. id)
     end
   end
+
+  setVar ("Remote_ID", Remote_ID, SID.bridge)         -- 2020.02.12   use as unique remote ID
+  local room_name = "ZWay-" .. Remote_ID              -- make sure room exists
+  local room_number = luup.rooms.create (room_name)   -- may already exist
   --
 
   setVar ("DisplayLine1", '', SID.AltUI)
   setVar ("DisplayLine2", ip, SID.AltUI)
 
   local status, comment
-
-  luup.set_failure (0, devNo)	        -- openLuup is UI7 compatible
-  status, comment = true, "OK"
 
   HTTP_request = function (url) return Z.request (url) end        -- global low-level access
 
@@ -1759,15 +1804,13 @@ function init (lul_device)
   _G[handler] = function () return json.encode (D), "application/json" end
   luup.register_handler (handler, 'z' .. devNo)
 
-  -- make sure room exists
-  local Remote_ID = 31415926
-  setVar ("Remote_ID", Remote_ID, SID.bridge)  -- 2020.02.12   use as unique remote ID
-
-  local room_name = "ZWay-" .. Remote_ID
-  local room_number = luup.rooms.create (room_name)   -- may already exist
-
   local ok = Z.status()
   if ok and ok.data == "OK" then
+
+    luup.set_failure (0, devNo)	        -- openLuup is UI7 compatible
+    status, comment = true, "OK"
+
+    -- create devices
     local vDevs = Z.devices ()
     cclass_update = createChildren (devNo, vDevs, room_number, OFFSET)
     updateChildren (vDevs)
