@@ -2,7 +2,7 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2020.03.23",
+  VERSION       = "2020.03.26",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -607,7 +607,43 @@ SRV.SceneControllerLED = {
 
  }
 
-SRV.WindowCovering  = { }
+SRV.WindowCovering  = {
+---------------
+-- 2020.03.25   rafale77 Additions
+--
+Up = function (d)
+
+  local class = "-38"
+  luup.variable_set (SID.SwitchPower, "Target", '1', d)
+  luup.variable_set (SID.Dimming, "LoadLevelTarget", "100", d)
+
+  local altid = luup.devices[d].id
+  altid = altid: match (NIaltid) and altid..class or altid
+  Z.command (altid, "up")
+end,
+
+Down = function (d)
+  local class = "-38"
+  luup.variable_set (SID.SwitchPower, "Target", '0', d)
+  luup.variable_set (SID.Dimming, "LoadLevelTarget", '0', d)
+
+  local altid = luup.devices[d].id
+  altid = altid: match (NIaltid) and altid..class or altid
+  Z.command (altid, "down")
+end,
+
+Stop = function (d)
+  local class = "-38"
+  luup.variable_set (SID.SwitchPower, "Target", '1', d)
+  local val =  luup.variable_get (SID.Dimming, "LoadLevelStatus", d)
+  luup.variable_set (SID.Dimming, "LoadLevelTarget", val, d)
+
+  local altid = luup.devices[d].id
+  altid = altid: match (NIaltid) and altid..class or altid
+  Z.command (altid, "stop")
+end,
+
+}
 SRV.Unknown         = { }   -- "catch-all" service
 
 
@@ -1299,58 +1335,34 @@ local function configureDevice (id, name, ldv, child)
 
   elseif (classes["64"] or classes["67"]) and classes["49"] then    -- a thermostat
     -- may have temp sensor [49], fan speed [68], setpoints [67], ...
-    -- ... operating state, operating mode, energy metering, ...
-    -- command_class ["68"] Fan_mode
+    -- ... operating state, operating mode, energy metering, fan mode...
     local c64 = classes["64"]
     if c64 then local tstat = c64[1]
       upnp_file, json_file, name = add_updater (tstat)
     end
-    local ops = classes["66"]  -- operating state
+    local ops = classes["66"]                       -- Operating state
     if ops then
       add_updater(ops[1])
     end
-    local fst = classes["69"]  -- fan state
+    for _, setpoint in ipairs (classes["67"]) do    -- Setpoints
+      add_updater(setpoint)
+    end
+    local fmode = classes["68"]                     -- Fan mode
+    if fmode then
+      add_updater(fmode[1])
+    end
+    local fst = classes["69"]                       -- Fan state
     if fst then
       add_updater(fst[1])
     end
-    local fmode = classes["68"]
-    if fmode then
-      add_updater(fmode[1])              -- TODO: extra fan modes
-    end
     local temp = classes["49"]
     add_updater(temp[1])
-    for _, setpoint in ipairs (classes["67"]) do
-      add_updater(setpoint)
-    end
-
---  elseif classes["38"] and #classes["38"] > 3 then    -- ... we'll assume that it's an RGB(W) switch
---    upnp_file = DEV.rgb
---    name = "rgb #" .. id
-
 
   elseif ((classes["37"] and #classes["37"] == 1)             -- ... just one switch
   or      (classes["38"] and #classes["38"] == 1) ) then         -- ... OR just one dimmer
-------------------------------------
---    if not classes["49"] and not classes ["113"] then             -- either NO sensors
---      local v = (classes["38"] or empty)[1] or classes["37"][1]
---      upnp_file, json_file, name = add_updater(v)
---    else
---      -- or WITH sensors
---      -- @rafale77, pull request #17 was for DesT’s GE combo device
---      -- a light switch with a motion sensor…
---      -- It was reporting two additional instances which don’t appear to be functional.
---      local meta = (classes["38"] or classes["37"]) [1] .meta
---      name = table.concat {"switch+ #", meta.node, '-', meta.instance}
---      child[meta.altid] = true                            -- force child creation
---      for _, v in ipairs (classes["113"] or empty) do    -- add motion sensors
---        if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then         -- not tamper switch or low battery notification
---          child[v.meta.altid] = true                            -- force child creation
---        end
---      end
---      luup.variable_set (SID.AltUI, "DisplayLine1", display_classes (classes), id)
---    end
-------------------------------------
-
+    -- @rafale77, pull request #17 was for DesT’s GE combo device
+    -- a light switch with a motion sensor…
+    -- It was reporting two additional instances which don’t appear to be functional.
     -- 2020.03.23 @akbooer represent as switch/dimmer rather than multi-sensor
     local w = (classes["38"] or classes["37"])[1]
     upnp_file, json_file, name = add_updater(w)                 -- add main device
@@ -1362,7 +1374,6 @@ local function configureDevice (id, name, ldv, child)
         child[v.meta.altid] = true                              -- force child creation
       end
     end
-------------------------------------
 
   elseif classes["48"] and #classes["48"] == 1                -- ... just one alarm
   and not classes["49"] then                                  -- ...and no sensors
@@ -1381,7 +1392,7 @@ local function configureDevice (id, name, ldv, child)
     local v = classes["102"][1]
     upnp_file, json_file, name = add_updater (v)
 
-  elseif classes["98"] and #classes["98"] == 1 then         -- door lock
+  elseif classes["98"] and #classes["98"] == 1 then           -- door lock
     local v = classes["98"][1]
     upnp_file, json_file, name = add_updater(v)
 
@@ -1389,7 +1400,7 @@ local function configureDevice (id, name, ldv, child)
     local v = classes["156"][1]
     upnp_file, json_file, name = add_updater(v)
 
-  elseif classes["49"]  then                              -- a multi-sensor combo
+  elseif classes["49"]  then                                  -- a multi-sensor combo
     local meta = classes["49"][1].meta
     name = table.concat {"multi #", meta.node, '-', meta.instance}
     for _, v in ipairs (classes["49"]) do
@@ -1398,11 +1409,11 @@ local function configureDevice (id, name, ldv, child)
         child[v.meta.altid] = true                            -- force child creation
       end
     end
-    for _, v in ipairs (classes["48"] or empty) do    -- add motion sensors
-      child[v.meta.altid] = true                            -- force child creation
+    for _, v in ipairs (classes["48"] or empty) do            -- add motion sensors
+      child[v.meta.altid] = true                              -- force child creation
     end
-    for _, v in ipairs (classes["113"] or empty) do    -- add motion sensors
-      if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then         -- not a tamper switch or low battery notification
+    for _, v in ipairs (classes["113"] or empty) do           -- add motion sensors
+      if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then -- not a tamper switch or low battery notification
         child[v.meta.altid] = true                            -- force child creation
       end
     end
@@ -1410,19 +1421,18 @@ local function configureDevice (id, name, ldv, child)
 
   elseif classes["113"] and #classes["113"] > 1 then   -- sensor with tamper @rafale77
     local v = classes["113"][1]
-    if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then         -- ignore tamper switch and low battery notification
+    if v.meta.sub_class ~= "3" and v.meta.scale ~= "8" then -- ignore tamper switch and low battery notification
       upnp_file, json_file, name = add_updater(v)
     end
   end
 
-  -- power meter service variables (for any device)
-  if classes["50"] then
+  if classes["50"] then               -- power meter service variables (for any device)
     for _, meter in ipairs (classes["50"]) do
       add_updater (meter)
     end
   end
 
-  if classes["128"] then
+  if classes["128"] then              -- battery level
     add_updater (classes["128"][1])
   end
 
@@ -1755,7 +1765,7 @@ function init (lul_device)
 	luup.devices[devNo].action_callback (generic_action)     -- catch all undefined action calls
 
 	POLLRATE    = uiVar ("Pollrate", 1, 0.5)            -- minimum value is 0.5 seconds
-  ASYNCPOLL   = uiVar ("AsyncPoll", "false")          -- if true, use ansynchronous polling of ZWave.me H/W
+  ASYNCPOLL   = uiVar ("AsyncPoll", "true")           -- if true, use ansynchronous polling of ZWave.me H/W
   CLONEROOMS  = uiVar ("CloneRooms", '')              -- if true, clone rooms and place devices there
   NAMEDEVICES = uiVar ("NameDevices", '')             -- if true, copy device names from ZWay
   ZERODIMMER  = uiVar ("ZeroDimmerWhenOff", "true")   -- if true, zero dimmer sliders when off
@@ -1781,9 +1791,11 @@ function init (lul_device)
       Z = ZWayAPI (ip, session)
       -- get homeId
       local _, id = Z.zDevAPI.controller()
-      id = id.data.homeId.value
-      id = ("%8x"): format (id < 0 and 2^31-id or id)
-      _log ("HomeId: " .. id)
+      if id then
+        id = id.data.homeId.value
+        id = ("%08x"): format(id): sub (-8,-1)  -- convert to 32-bit hex
+        _log ("HomeId: " .. id)
+      end
     end
   end
 
