@@ -4,7 +4,7 @@ module(..., package.seeall)
 
 ABOUT = {
   NAME          = "zway_cgi",
-  VERSION       = "2020.03.08",
+  VERSION       = "2020.03.22",
   DESCRIPTION   = "a WSAPI CGI proxy configuring the ZWay plugin",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -31,6 +31,7 @@ ABOUT = {
 
 -- 2020.02.16  update for I_ZWay2 device configuration
 -- 2020.02.23  handle POST request to reconfigure ZWay child devices
+-- 2020.03.19  display all variables of any not fully-configured devices
 
 
 local wsapi = require "openLuup.wsapi" 
@@ -50,6 +51,7 @@ local SID = {
   }
 
 local button_class = "w3-button w3-border w3-margin w3-round-large "
+local nbsp = json.decode '["\\u00A0"]' [1]    -- yes, really
 
 --[[  
   local status, txt = ZWay.HTTP_request (wsapi_env.SCRIPT_NAME)
@@ -125,42 +127,33 @@ local function bridge_post (form)
   local children = dev:get_children()   -- get the device numbers of the bridge node devices
   for _,n in ipairs (children) do
     local specified = luup.variable_get (SID.ZWay, "Children", n) or ''
---    if specified then
-      local n_i = luup.devices[n].id    -- get the (alt)id
-      local new = ticked[n_i]
-      if new then 
-        table.sort(new)
-        new =  table.concat (ticked[n_i], ", ") 
-      else
-        new = ''  -- no children is the default
-      end
-      if specified ~= new then    -- it's changed! so update
-        luup.variable_set (SID.ZWay, "Children", new, n) 
-      end
---    end
+    local n_i = luup.devices[n].id    -- get the (alt)id
+    local new = ticked[n_i]
+    if new then 
+      table.sort(new)
+      new =  table.concat (ticked[n_i], ", ") 
+    else
+      new = ''  -- no children is the default
+    end
+    if specified ~= new then    -- it's changed! so update
+      luup.variable_set (SID.ZWay, "Children", new, n) 
+    end
   end
   
 end
 
--- returns an ordered list grouped by instance
--- NB: theres are openLuup vars, not ZWay ones!
-local function indexVarsByInstance (vars)
-  local index = {}
-  -- sort all the variable ids into instances
+-- returns an ordered list 
+-- NB: these are openLuup vars, not ZWay ones!
+local function listVars (vars)
+  local list = {}
   for _,v in ipairs (vars) do
     local vtype, nics = v.name: match "zway_(%D*)(.*)"
     nics = nics or ''
     local node, instance, command_class, scale, sub_class, sub_scale, tail = nics: match (NICS_pattern)
-    if node and not tail: match "LastUpdate$" then
-      local x = index[instance] or {}
-      x[#x+1] = nics
-      index[instance] = x
+    if node and not tail: match "LastUpdate$" and command_class ~= "128" then  -- ignore batteries
+      list[#list+1] = nics
     end
   end
-  local list = {}
-  for inst in pairs(index) do list[#list+1] = inst end
-  table.sort (list)
-  for i, inst in ipairs(list) do list[i] = index[inst] end
 --  print ((json.encode(list)))
   return list
 end
@@ -185,8 +178,13 @@ local function bridge_form (bridge, action)
   end
   
   -- set up the HTML devices table
-  local tbl = xhtml.table {class="w3-small w3-hoverable w3-border"}
-  tbl.header {{colspan=2, "devNo"}, {colspan=3, "altid"}, "device file", "name", ''}
+  local rows = xhtml.tbody {}
+  local tbl = xhtml.table {class="w3-small w3-hoverable w3-border",
+    xhtml.thead {
+      xhtml.trow ({ {colspan=2, "devNo"},
+      {colspan=2, "altid"}, "device file", nbsp:rep(3), "name"}, true)},
+      rows
+    }
   
   for _,n in ipairs (children) do
     local c = luup.devices[n]
@@ -204,42 +202,41 @@ local function bridge_form (bridge, action)
     local altid = c.id
 --    print ('', altid, c.attributes.device_file, c.description)
     
-    tbl.row {n, '', '', '', altid, c.attributes.device_file or '', c.description}
+    local vars = listVars (c.variables)
+    local upnp_file = c.attributes.device_file or ''
+--    local button = #vars < 2
+--      and ''
+--      or xhtml.button{type = "button", onclick= table.concat {"ShowHide('", altid, "')"}, '▼'}
+    local button = ''
+    rows[#rows+1] = xhtml.tbody {
+      xhtml.trow {n, '', '', altid, upnp_file, '', c.description}  }
     
-    if c.attributes.device_file == DEV.combo then    
-      -- now go through each instance in order
-      local varsByInst = indexVarsByInstance (c.variables)
-      for _,vars in ipairs (varsByInst) do
-        
-        local vtype = ''    -- TODO: fix this!!!!
-        
-        if #varsByInst > 1 then     -- add row to show that we have multiple instances
-          local instAltid = vars[1]: match "^%d+%-%d+"
-          local instId = currentIndexedByAltid[instAltid]    -- find its device number
-          local d = luup.devices[instId]
---          print (type(instId), instId, d)
-          local dfile = d and d.attributes.device_file or '' 
-          local name  = d and d.description or "Instance"
-          tbl.row {'', instId, '', '', instAltid, dfile, name}
-        end
-        
+    do          
         -- now go through all variables within the instance
-        for _, nics in ipairs (vars) do
-          local checked = cs[nics] and nics or nil
-          local dfile, dname, dnumber
-          local gdev = grandchild[nics]
-          if checked and gdev then
-            dfile, dname, dnumber = gdev.attributes.device_file, gdev.description, gdev.attributes.id
+        local sw_or_dim = "^%d+%-%d+%-3[78]"
+        if #vars > 1
+        -- ignore switch + dimmer (= Somfy blind?)
+        and not (#vars == 2 and vars[1]:match (sw_or_dim) and vars[2]: match (sw_or_dim)) then
+          local v = xhtml.tbody {id = altid }
+--          local v = xhtml.tbody {id = altid, class="w3-hide" }
+          rows[#rows+1] = v
+          for _, nics in ipairs (vars) do
+            local checked = cs[nics] and nics or nil
+            local dfile, dname, dnumber
+            local gdev = grandchild[nics]
+            if checked and gdev then
+              dfile, dname, dnumber = gdev.attributes.device_file, gdev.description, gdev.attributes.id
+            end
+            v[#v+1] = xhtml.trow {'', dnumber or '',
+              xhtml.input {type="checkbox", name=nics, checked=checked}, 
+              nics, -- vtype,
+              dfile, ' ', dname }
           end
-          tbl.row {'', '', dnumber or '',
-            xhtml.input {type="checkbox", name=nics, checked=checked}, 
-            nics, -- vtype,
-            dfile, dname }
         end
-      end
+--      end
     end
   end
-  
+    
   local title = xhtml.div {class = "w3-container w3-grey", 
     xhtml.h3 {'[', bridge.id, '] ', dev.description,
               xhtml.input {class = button_class .. "w3-pale-red",
@@ -284,9 +281,21 @@ function run(wsapi_env)
     d[#d+1] = tbl
   end
     
+  local script = h.script {
+  [[
+  function ShowHide(id) {
+    var x = document.getElementById(id);
+    if (x.className.indexOf("w3-show") == -1) {
+      x.className += " w3-show";
+    } else {
+      x.className = x.className.replace(" w3-show", "");
+    }
+  }]]}
+  
   h.body:appendChild {
     h.meta {charset="utf-8", name="viewport", content="width=device-width, initial-scale=1"}, 
     h.link {rel="stylesheet", href="https://www.w3schools.com/w3css/4/w3.css"},
+    script,
     h.div {class = "w3-grey", 
       h.div {class = "w3-bar", h.h2 "Device configuration for ZWay plugin"} },
       d } 
