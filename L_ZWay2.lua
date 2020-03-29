@@ -1188,7 +1188,6 @@ CC.meta = function (v)
     return {
       name      = v.metrics.title,
 
-
       upnp_file = upnp_file,
       service   = service,
       json_file = json_file,
@@ -1218,19 +1217,6 @@ local function new_updater (id, vDev)
   end
 
   return meta.upnp_file, meta.json_file, vDev.metrics.title
-end
-
-end -- COMMAND CLASSES
-
-local command_class = {}
-
-function command_class.new (dino, meta)
---  local updater = command_class[meta.c_class] or command_class["0"]
-  local updater = (CC[meta.c_class] or CC["0"]) .updater
-  return function (inst, ...)
-    -- call with deviceNo, instance object, and metadata (for persistent data)
-    return updater (dino, inst, meta, ...)
-  end
 end
 
 ----------------------------
