@@ -2,7 +2,7 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2020.04.5",
+  VERSION       = "2020.04.05",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -622,14 +622,14 @@ SRV.SceneControllerLED = {
     local indicator = tonumber(args.Indicator)
     local data = "[%s,0,29,13,1,255,%s,0,0,10]"
     local curled = luup.variable_get(SID.SceneControllerLED, "LightSettings", d) or 0
-    local oldled = ledbitvalue(curled,indicator)
-    local led = btn_value(indicator, color)
-    local newled = curled-oldled+led
-    if indicator == 5 then newled = btn_value(1, color)+btn_value(2, color)+btn_value(3, color)+btn_value(4, color) end
-    if newled <= 255 then
+    local oldledv = ledbitvalue(curled,indicator)
+    local newledv = btn_value(indicator, color)
+    local led = curled-oldledv+newledv
+    if indicator == 5 then led = btn_value(1, color)+btn_value(2, color)+btn_value(3, color)+btn_value(4, color) end
+    if led <= 255 then
       data = data: format(cc,led)
       Z.zwsend(id,data)
-      luup.variable_set(SID.SceneControllerLED, "LightSettings", newled, d)
+      luup.variable_set(SID.SceneControllerLED, "LightSettings", led, d)
     end
   end,
 
