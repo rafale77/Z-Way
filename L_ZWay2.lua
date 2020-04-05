@@ -607,7 +607,7 @@ local function ledbitvalue(ls, button)
   for v=3,1,-1 do
     b = btn_val(button,v)
     local val = bit.band(b, ls)
-    return val
+    if val == b then return val end
   end
   return 0
 end
