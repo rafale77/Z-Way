@@ -598,12 +598,12 @@ SRV.LightSensor           = { }
 local function btn_val(button, color)
   local tot = 0
   for i=0,16 do
-    if (bit.band(2^i, color) ~= 0) then  tot = tot + (2 ^ (button-1) * 2 ^ (4*(i))) end
+    if (bit.band(2^i, color) ~= 0) then tot = tot + (2 ^ (button-1) * 2 ^ (4*(i))) end
   end
   return tot
 end
 
-local function ledbitvalue(ls, button)
+local function ledbitval(ls, button)
   for v=3,1,-1 do
     b = btn_val(button,v)
     local val = bit.band(b, ls)
@@ -622,10 +622,10 @@ SRV.SceneControllerLED = {
     local indicator = tonumber(args.Indicator)
     local data = "[%s,0,29,13,1,255,%s,0,0,10]"
     local curled = luup.variable_get(SID.SceneControllerLED, "LightSettings", d) or 0
-    local oldledv = ledbitvalue(curled,indicator)
-    local newledv = btn_value(indicator, color)
+    local oldledv = ledbitval(curled,indicator)
+    local newledv = btn_val(indicator, color)
     local led = curled-oldledv+newledv
-    if indicator == 5 then led = btn_value(1, color)+btn_value(2, color)+btn_value(3, color)+btn_value(4, color) end
+    if indicator == 5 then led = btn_val(1, color)+btn_val(2, color)+btn_val(3, color)+btn_val(4, color) end
     if led <= 255 then
       data = data: format(cc,led)
       Z.zwsend(id,data)
