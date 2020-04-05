@@ -629,12 +629,14 @@ SRV.SceneControllerLED = {
     local newled = curled-oldled+led
     if indicator == 5 then 
       led = btn_value(1, color)+btn_value(2, color)+btn_value(3, color)+btn_value(4, color) 
-    elseif  newled <= 255 then
+    else
       led = newled
     end
-    data = data: format(cc,led)
-    Z.zwsend(id,data)
-    luup.variable_set(SID.SceneControllerLED, "LightSettings", led, d)
+    if led <= 255 then
+      data = data: format(cc,led)
+      Z.zwsend(id,data)
+      luup.variable_set(SID.SceneControllerLED, "LightSettings", led, d)
+    end
   end,
 
  }
