@@ -595,6 +595,25 @@ SRV.GenericSensor         = { }
 SRV.HumiditySensor        = { }
 SRV.LightSensor           = { }
 
+local function btn_val(button, color)
+  local bit = require("bit")
+  local tot = 0
+  for i=0,16 do
+    if (bit.band(2^i, color) ~= 0) then  tot = tot + (2 ^ (button-1) * 2 ^ (4*(i))) end
+  end
+  return tot
+end
+
+local function ledbitvalue(ls, button)
+  local bit = require("bit")
+  for v=3,1,-1 do
+    b = btn_val(button,v)
+    local val = bit.band(b, ls) 
+    return val
+  end
+  return 0
+end
+
 SRV.SceneControllerLED = {
 
   SetLight = function (d, args)
@@ -602,19 +621,16 @@ SRV.SceneControllerLED = {
     local id = altid: match (NIaltid)
     local cc = 145     --command class
     local color = tonumber(args.newValue)
-    local indicator = args.Indicator
+    local indicator = tonumber(args.Indicator)
     local data = "[%s,0,29,13,1,255,%s,0,0,10]"
-    local ItoL = {["1"] = 1, ["2"] = 2, ["3"] = 4, ["4"] = 8, ["5"] = 15}
-    local led = ItoL[indicator]
-    if led then
-      local bit_lshift_led = led * 16                 --bit.lshift(led,4)
-      if color == 2 then led = bit_lshift_led
-      elseif color == 3 then led = led + bit_lshift_led
-      elseif color == 0 then led = 0
-      end
-      data = data: format(cc,led)
-      Z.zwsend(id,data)
-    end
+    local curled = luup.variable_get(SID.SceneControllerLED, "LightSettings", d) or 0
+    local oldled = ledbitvalue(curled,indicator)
+    local led = btn_value(indicator, color)
+    local newled = curled-oldled+led
+    if indicator ~= "5" and newled <= 255 then led = newled end
+    data = data: format(cc,led)
+    Z.zwsend(id,data)
+    luup.variable_set(SID.SceneControllerLED, "LightSettings", led, d)
   end,
 
  }
