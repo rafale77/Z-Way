@@ -2,7 +2,7 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2020.03.30",
+  VERSION       = "2020.03.31",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -48,6 +48,9 @@ ABOUT = {
 -- 2020.03.16  continued refactoring ... including asynchronous HTTP requests
 -- 2020.03.23  improve thermostat recognition (thanks @ronluna)
 -- 2020.03.29  fix handling of missing class #67 in thermostats (thanks @ronluna)
+-- 2020.03.30  @rafale77, pull request#24, fix Window Covering Service
+-- 2020.03.31  fix x_or_y() functions to work with 1 or 0 as well as '1' or '0' (thanks @DesT)
+
 
 local json    = require "openLuup.json"
 local chdev   = require "openLuup.chdev"      -- NOT the same as the luup.chdev module! (special create fct)
@@ -77,7 +80,6 @@ end
 local function ZWayAPI (ip, sid)
 
   local cookie = "ZWAYSession=" .. (sid or '')
---    local ok, err = async.request (url, VeraBridge_async_callback)
 
   local function build_request (url, body, response_body)
     return {
@@ -385,25 +387,35 @@ end
 -- given  "on" or "off" or "1"  or "0"
 -- return "1"  or "0"   or "on" or "off"
 local function on_or_off (x)
-  local y = {["on"] = "1", ["off"] = "0", ["1"] = "on", ["0"] = "off", [true] = "on"}
+  local y = {
+    ["on"] = "1", ["off"] = "0", 
+    ["1"] = "on", ["0"] = "off", 
+    [1] = "on", [0] = "off", 
+    [true] = "on"}
   local z = tonumber (x)
   local on = z and z > 0
   return y[on or x] or x
 end
 
 local function open_or_close (x)
-  local y = {["open"] = "0", ["close"] = "1", ["0"] = "open", ["1"] = "close"}
+  local y = {
+    ["open"] = "0", ["close"] = "1", 
+    ["0"] = "open", ["1"] = "close",
+    [0] = "open", [1] = "close"}
   return y[x] or x
 end
 
 local function rev_open_or_close (x)
-  local y = {["open"] = "1", ["close"] = "0", ["1"] = "open", ["0"] = "close"}
+  local y = {
+    ["open"] = "1", ["close"] = "0", 
+    ["1"] = "open", ["0"] = "close",
+    [1] = "open", [0] = "close"}
   return y[x] or x
 end
 
 -- make either "1" or "true" or true work the same way
 local function is_true (flag)
-  local y = {["true"] = true, ["1"] = true, [true] = true}
+  local y = {["true"] = true, ["1"] = true, [1] = true, [true] = true}
   return y [flag]
 end
 
