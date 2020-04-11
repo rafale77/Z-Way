@@ -10,8 +10,10 @@
   Z-way-server on the other hand is built on a much more stable and solid API and zwave library. The "Expert UI" can pretty much support any device which has nothing propriatory. It's smarthome UI, which API this plugin relies on however has its flaws, filtering out useful command classes and requiring some workaround to address the lower level API.		
 
   Assuming that the entire automation setup (scenes and plugins) have already been migrated to openLuup, you can now migrate the zwave hub and take advantage of the best part of the vera, it's object data structure, API and lua/plugins, and get rid of its instability.
+ 
+![alt text](https://anhman.neocities.org/Hub.png)
   
-  Having tested a wide number alternatives, including some roadmapped ones, I concluded that, starting from a vera setup, this was the best path to a stable and scalable system.
+  Having tested a wide number alternatives, including some roadmapped ones, I concluded that, starting from a vera setup, this solution is the best path to a stable and scalable system.
   
   
   # Guide to migrate from Vera as a zwave device hub to Z-way		
