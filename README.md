@@ -13,7 +13,7 @@
  
 ![alt text](https://anhman.neocities.org/Hub.png)
   
-  Having tested a wide number alternatives, including some roadmapped ones, I concluded that, starting from a vera setup, this solution is the best path to a stable and scalable system.
+  Having tested a wide number alternatives, including some roadmapped ones, I concluded that, starting from a vera setup, this solution is the best path to a stable and scalable system. The takeover of mios by eZLO now focused on a new platform has also not yielded much hope for a migration path or even for a viable solution in terms of performance, reliability and security.
   
   
   # Guide to migrate from Vera as a zwave device hub to Z-way		
