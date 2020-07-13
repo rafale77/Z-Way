@@ -52,7 +52,7 @@ ABOUT = {
 -- 2020.03.31  fix x_or_y() functions to work with 1 or 0 as well as '1' or '0' (thanks @DesT)
 
 
-local json    = require "openLuup.json"
+local json    = require "rapijson"
 local chdev   = require "openLuup.chdev"      -- NOT the same as the luup.chdev module! (special create fct)
 local async   = require "openLuup.http_async"
 local http    = require "socket.http"
