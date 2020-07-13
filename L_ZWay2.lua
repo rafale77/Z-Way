@@ -2,7 +2,7 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2020.04.5",
+  VERSION       = "2020.07.12",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2020 AKBooer",
@@ -50,6 +50,13 @@ ABOUT = {
 -- 2020.03.29  fix handling of missing class #67 in thermostats (thanks @ronluna)
 -- 2020.03.30  @rafale77, pull request#24, fix Window Covering Service
 -- 2020.03.31  fix x_or_y() functions to work with 1 or 0 as well as '1' or '0' (thanks @DesT)
+-- 2020.04.05  @rafale77, pull request #27, scene controller LED handling (Leviton 4-button)
+-- 2020.05.11  don't disable devices in Room101 (because they weren't enabled when restored.  Thanks @kfxo)
+--             see: https://smarthome.community/topic/111/all-z-way-devices-disabled-attribute-is-set-to-1
+-- 2020.05.12  add command class 1 updater for ZWave.me battery switch, thanks @ArcherS
+--             see: https://smarthome.community/topic/113/changing-device-type-for-wall-controller
+-- 2020.07.12  add CC 91, Central Scene for Remotec ZRC90 (and others?)
+--             see: https://smarthome.community/topic/171/remotec-zrc90
 
 
 local json    = require "openLuup.json"
@@ -57,7 +64,7 @@ local chdev   = require "openLuup.chdev"      -- NOT the same as the luup.chdev 
 local async   = require "openLuup.http_async"
 local http    = require "socket.http"
 local ltn12   = require "ltn12"
-local bit     = require "bit"
+
 local empty = setmetatable ({}, {__newindex = function() error ("read-only", 2) end})
 
 local function _log(text, level)
@@ -199,10 +206,16 @@ local function ZWayAPI (ip, sid)
           local status, response = request "/ZWaveAPI/Run/zway.controller"
           return status, json.decode (response)
         end,
+        command = zwcommand,
+        send = zwsend,
+
       },
 
     -- Virtual Device API
-    vDevAPI = {},
+    vDevAPI = {
+        command = command,
+        status  = status,
+      },
 
     -- JavaScript API
     JSAPI = {},
@@ -595,49 +608,55 @@ SRV.GenericSensor         = { }
 SRV.HumiditySensor        = { }
 SRV.LightSensor           = { }
 
-local function btn_val(button, color)
-  local tot = 0
-  for i=0,16 do
-    if (bit.band(2^i, color) ~= 0) then  tot = tot + (2 ^ (button-1) * 2 ^ (4*(i))) end
-  end
-  return tot
+
+-- returns the first n bits of the binary representation of x
+local function num2bits (x, n)
+  local b = {}
+  for i = 1,n do b[i] = x % 2; x = (x - b[i]) / 2 end
+  return b
 end
 
-local function ledbitvalue(ls, button)
-  for v=3,1,-1 do
-    b = btn_val(button,v)
-    local val = bit.band(b, ls)
-    return val
-  end
-  return 0
+-- assemble number from binary array representation
+local function bits2num (b)
+  local d = 0
+  for i = #b,1,-1 do d = d + d + b[i] end
+  return d
 end
 
+-- see:  https://community.getvera.com/t/leviton-scene-controller-questions/172155
+-- also: http://wiki.micasaverde.com/index.php/Leviton_LED_Debugging
 SRV.SceneControllerLED = {
 
+-- newValue = 0,1,2 or 3 where 0=off, 1=green, 2=red, 3=orange (red and green)
+-- Indicator = 1-4, or 5 to set all to same colour
+-- LightSettings bits are arranged as: MSB RRRRGGGG LSB
+--                                         43214321 corresponding button number
+-- 2020.04.05  thanks to @rafale77 for explaining how this works!
   SetLight = function (d, args)
+    local curled = luup.variable_get(SID.SceneControllerLED, "LightSettings", d) or 0
+
+    local curbit = num2bits (curled, 8)               -- extract 8 LSBs
+    local colbit = num2bits (args.newValue, 2)        -- extract 2 LSBs
+    local indicator = tonumber(args.Indicator)
+
+    for _, lamp in ipairs (indicator==5 and {1,2,3,4} or {indicator}) do
+      curbit[lamp] = colbit[1]                -- green LED
+      curbit[lamp + 4] = colbit[2]            -- red LED
+    end
+
+    local led = bits2num(curbit)
+    luup.variable_set(SID.SceneControllerLED, "LightSettings", led, d)
+
     local altid = luup.devices[d].id
     local id = altid: match (NIaltid)
     local cc = 145     --command class
-    local color = tonumber(args.newValue)
-    local indicator = tonumber(args.Indicator)
     local data = "[%s,0,29,13,1,255,%s,0,0,10]"
-    local curled = luup.variable_get(SID.SceneControllerLED, "LightSettings", d) or 0
-    local oldled = ledbitvalue(curled,indicator)
-    local led = btn_value(indicator, color)
-    local newled = curled-oldled+led
-    if indicator == 5 then
-      led = btn_value(1, color)+btn_value(2, color)+btn_value(3, color)+btn_value(4, color)
-    else
-      led = newled
-    end
-    if led <= 255 then
-      data = data: format(cc,led)
-      Z.zwsend(id,data)
-      luup.variable_set(SID.SceneControllerLED, "LightSettings", led, d)
-    end
+    data = data: format(cc,led)
+    Z.zwsend(id,data)
   end,
 
  }
+
 
 SRV.WindowCovering  = {
 ---------------
@@ -832,7 +851,7 @@ end
 
 local CC = {   -- command class object
 
-  -- catch-all
+  -- scene controller, also used for CC ["1"]
   ["0"] = {
     updater = function (d, inst, meta)
       local dev = luup.devices[d]
@@ -842,7 +861,7 @@ local CC = {   -- command class object
         local click = inst.updateTime
         if click ~= meta.click then -- force variable updates
           local scene = meta.scale
-          local time  = os.time()     -- "◷" == json.decode [["\u25F7"]]
+          local time  = os.time()
 
           luup.variable_set (SID.SceneController, "sl_SceneActivated", scene, d)
           luup.variable_set (SID.SceneController, "LastSceneTime",time, d)
@@ -851,6 +870,7 @@ local CC = {   -- command class object
         end
 
       else
+        -- catch-all
         --  local message = "no update for device %d [%s] %s %s"
         --  log (message: format (d, inst.id, inst.deviceType or '?', (inst.metrics or {}).icon or ''))
         --...
@@ -858,6 +878,13 @@ local CC = {   -- command class object
     end,
 
     files = { nil, SID.HaDevice },    -- device, service, json files
+  },
+
+  -- dumb switch, like ZWave.me battery switch
+  ["1"] = {
+    updater = function () end,      -- dummy stub to be assigned at end of CC table
+
+    files = { nil, SID.HaDevice },
   },
 
   -- binary switch
@@ -1084,6 +1111,25 @@ local CC = {   -- command class object
   files = {nil, SID.HVAC_FanOperatingMode},
   },
 
+  --central scene
+  ["91"] = {
+    updater = function (d, inst, meta)
+      local dev = luup.devices[d]
+      local click = inst.updateTime
+      if click ~= meta.click then -- force variable updates
+        local scene = meta.scale
+        local time  = os.time()
+
+        luup.variable_set (SID.SceneController, "sl_CentralSceneUpdates", scene, d)
+        luup.variable_set (SID.SceneController, "LastSceneTime",time, d)
+
+        meta.click = click
+      end
+    end,
+
+    files = { DEV.controller, SID.SceneController },
+  },
+
   -- door lock
   ["98"] = {
     updater = function (d, inst)
@@ -1162,6 +1208,8 @@ local CC = {   -- command class object
 
 }
 
+
+CC   ["1"].updater = CC  ["0"].updater      -- dumb switch / controller
 CC ["113"].updater = CC ["48"].updater      -- alarm
 CC ["156"].updater = CC ["48"].updater      -- tamper switch (deprecated)
 
@@ -1276,14 +1324,14 @@ local function move_to_room_101 (devices)
     local dev = luup.devices[n]
     _log (table.concat {"Room 101: [", n, "] ", dev.description})
     dev: rename (nil, 101)            -- move to Room 101
-    dev: attr_set ("disabled", 1)     -- and make sure it can't run
+--    dev: attr_set ("disabled", 1)     -- and make sure it can't run
   end
 end
 
 -- index list of vDevs by command class, saving altids of occurrences
 local dont_count = {
   ["0"] = true,         -- generic
-  ["1"] = true,         -- ???
+  ["1"] = true,         -- button of some sort ???
   ["50"] = true,        -- power
   ["51"] = true,        -- switch colour
   ["128"] = true,       -- batteries
@@ -1347,6 +1395,14 @@ local function configureDevice (id, name, ldv, child)
     for _,button in ipairs (classes["0"]) do
 --      print ("adding", button.metrics.title)
       add_updater (button)    -- should work for Minimote, at least
+    end
+
+  elseif classes.n == 0 and classes["1"] and #classes["1"] > 0 then    -- just buttons?
+    upnp_file = DEV.controller
+    name = classes["1"][1].metrics.title
+--    print ("CC1", id, name)
+    for _,button in ipairs (classes["1"]) do
+      add_updater (button)    -- should work for ZWave.me battery switch
     end
 
   elseif classes.n <= 1 then                                 -- a singleton device
@@ -1415,6 +1471,10 @@ local function configureDevice (id, name, ldv, child)
     upnp_file = v.meta.upnp_file
     name = v.metrics.title
     -- updaters are set at the end of this if-then-elseif statement
+
+  elseif classes["91"] and #classes["91"] == 1 then           -- central scene
+    local v = classes["91"][1]
+    upnp_file, json_file, name = add_updater (v)
 
   elseif classes["102"] and #classes["102"] == 1 then         -- door lock (barrier)
     local v = classes["102"][1]
@@ -1619,6 +1679,7 @@ local function updateChildren (vDevs)
         local id = vtype .. altid
         if getVar (id, sid, zDevNo) then
           -- fast update of existing variable values (this really does make a difference)
+          -- NB. this means that you CAN'T trigger, watch, or log these variables
           local vars = zDev.services[sid].variables
           vars[id].value = inst.metrics.level
           vars[id .. "_LastUpdate"].value = inst.updateTime
