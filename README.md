@@ -32,9 +32,9 @@
     "cd /etc/cmh | ls"
     You should see a bunch of "dongle.dump" files. These are the backups of your zwave chips NVM. Basically your network data, including all the node information and routing.		
  4. Now insert the uzb into the usb port of the vera.  		
-    ls /dev        should show a serial port called ttyACM0		
+    "ls /dev" should show a serial port called ttyACM0		
  5. Go into the vera UI and go under Settings/Z-wave settings/Options Tab and change the port field to "/dev/ttyACM0" and let the luup engine reload. This will wipe out all the zwave devices from your vera configuration (Another wonderful feature of the luup reload...) and switch you to the uzb as your zwave chip.		
- 6. Go back to your SSH client window and still in the folder /etc/cmh/, type "touch dongle.restore", go back to the vera UI and start a luup reload. Once the luup engine has reloaded and you can see your dashboard, go to the ssh screen and type "reboot"		
+ 6. Go back to your SSH client window and still in the folder /etc/cmh/, type "touch dongle.restore", go back to the vera UI and trigger a luup reload. Once the luup engine has reloaded and you can see your dashboard, go to the ssh screen and verify that the "/etc/cmh/dongle.restore" file is no longer there and that instead you should see a "/etc/cmh/dongle.restore.go" then enter "reboot" and press enter to reboot the vera.
  7. Upon reboot of the vera you should see all your old zwave devices repopulated with new names and without room assignments. Success! You have cloned your zwave dongle into the uzb.		
 
   B. Security key. (S0)		
