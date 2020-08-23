@@ -29,8 +29,7 @@
   1. Always have a recent backup of your vera configuration handy. Preferably backup your zwave network along with your configuration now before you do anything.		
  2. SSH into the vera using an SSH client (i.e putty)		
  3. Go to /etc/cmh/ and take a look at your dongle's backup: 		
-    cd /etc/cmh		
-    ls		
+    "cd /etc/cmh | ls"
     You should see a bunch of "dongle.dump" files. These are the backups of your zwave chips NVM. Basically your network data, including all the node information and routing.		
  4. Now insert the uzb into the usb port of the vera.  		
     ls /dev        should show a serial port called ttyACM0		
