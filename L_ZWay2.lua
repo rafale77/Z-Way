@@ -532,16 +532,21 @@ SRV.HaDevice = {
       Z.zwcommand(id, inst, cc, cmd)
     end,
 
-    GetConfig = function (d,args)
-      local cc = 112
-      local par = args.parameter
-      local data = "Get(%s)"
-      data = data: format(par)
-      local altid = luup.devices[d].id
-      local id, inst = altid: match (NIaltid)
-      status, response = Z.zwcommand(id, inst, cc, data)
-      return response
-    end,
+    GetConfig = {
+      run = function (d,args)
+        local cc = 112
+        local par = args.parameter
+        local data = "Get(%s)"
+        local data2 = "data[%s].val.value"
+        local altid = luup.devices[d].id
+        local id, inst = altid: match (NIaltid)
+        data = data: format(par)
+        data2 = data2: format(par)
+        Z.zwcommand(id, inst, cc, data)
+        ret, conf = Z.zwcommand(id, inst, cc, data2)
+      end,
+      extra_returns = {Config = function () return conf end}
+    },
 
     SendConfig = function (d,args)
       local cc = 112
@@ -552,7 +557,10 @@ SRV.HaDevice = {
       local id, inst = altid: match (NIaltid)
       Z.zwcommand(id, inst, cc, data)
     end,
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
   }
 
 
@@ -1138,18 +1146,6 @@ local CC = {   -- command class object
   files = {nil, SID.HVAC_FanOperatingMode},
   },
 
-  --central scene
-  ["91"] = {
-    updater = function (d, inst, meta)
-      local click = inst.updateTime
-      if click ~= meta.click then -- force variable updates
-        local button = inst.metrics.level
-        local time  = os.time()
-        luup.variable_set (SID.SceneController, "sl_CentralScene", button, d)
-        luup.variable_set (SID.SceneController, "LastSceneTime",time, d)
-        meta.click = click
-      end
-    end,
 
   --central scene
   ["91"] = {
