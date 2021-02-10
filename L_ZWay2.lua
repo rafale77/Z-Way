@@ -2,14 +2,14 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2020.11.24",
+  VERSION       = "2021.01.19",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
-  COPYRIGHT     = "(c) 2013-2020 AKBooer",
+  COPYRIGHT     = "(c) 2013-2021 AKBooer",
   DOCUMENTATION = "https://community.getvera.com/t/openluup-zway-plugin-for-zwave-me-hardware/193746",
   DEBUG         = false,
   LICENSE       = [[
-  Copyright 2013-2020 AK Booer
+  Copyright 2013-2021 AK Booer
 
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
@@ -58,6 +58,7 @@ ABOUT = {
 -- 2020.07.12  add CC 91, Central Scene for Remotec ZRC90 (and others?)
 --             see: https://smarthome.community/topic/171/remotec-zrc90
 -- 2020.11.24  add category_num, if not set already, when checking devices
+-- 2021.01.19  flag authorisation failure during synchronous or asynchronous requests (thanks @PerH)
 
 
 local json    = require "rapidjson"
@@ -145,8 +146,8 @@ local function ZWayAPI (ip, sid)
 
   local function devices ()
     local url = "http://%s:8083/ZAutomation/api/v1/devices"
-    local _, d = HTTP_request_json (url: format (ip))
-    return d and d.data and d.data.devices or empty
+    local status, d = HTTP_request_json (url: format (ip))
+    return d and d.data and d.data.devices or empty, status
   end
 
   -- send a command
@@ -434,6 +435,11 @@ local function is_true (flag)
   return y [flag]
 end
 
+-- 2021.01.19 flag authorisation failure
+local function authentication_failure()
+  luup.set_failure (2)
+  setVar ("DisplayLine1", 'Login required', SID.AltUI)
+end
 
 ----------------------------------------------------
 --
@@ -546,6 +552,14 @@ SRV.HaDevice = {
       local id, inst = altid: match (NIaltid)
       Z.zwcommand(id, inst, cc, data)
     end,
+
+    GetConfig = {
+      run = function()
+        -- do whatever you need to get the status into ZWay_ZWaveCONFIG
+        ZWay_ZWaveCONFIG = 42
+      end,
+      extra_returns = {Config = function () return ZWay_ZWaveCONFIG end}
+    },
   }
 
 
@@ -900,6 +914,13 @@ local CC = {   -- command class object
     files = { nil, SID.HaDevice },
   },
 
+  -- dumb switch, like ZWave.me battery switch
+  ["1"] = {
+    updater = function () end,      -- dummy stub to be assigned at end of CC table
+
+    files = { nil, SID.HaDevice },
+  },
+
   -- binary switch
   ["37"] = {
     updater = function (d, inst, meta)
@@ -1123,6 +1144,19 @@ local CC = {   -- command class object
 
   files = {nil, SID.HVAC_FanOperatingMode},
   },
+
+  --central scene
+  ["91"] = {
+    updater = function (d, inst, meta)
+      local click = inst.updateTime
+      if click ~= meta.click then -- force variable updates
+        local button = inst.metrics.level
+        local time  = os.time()
+        luup.variable_set (SID.SceneController, "sl_CentralScene", button, d)
+        luup.variable_set (SID.SceneController, "LastSceneTime",time, d)
+        meta.click = click
+      end
+    end,
 
   --central scene
   ["91"] = {
@@ -1754,9 +1788,13 @@ do
   -- original synchronous polling
 
   function _G.ZWay_delay_callback ()
-    local vDevs = Z.devices()
-    if vDevs then updateChildren (vDevs) end
-    luup.call_delay ("ZWay_delay_callback", POLLRATE)
+    local vDevs, status = Z.devices()
+    if status == 401 then
+      authentication_failure()
+    else
+      if vDevs then updateChildren (vDevs) end
+      luup.call_delay ("ZWay_delay_callback", POLLRATE)
+    end
   end
 
   -- asynchronous polling
@@ -1789,6 +1827,8 @@ do
         updateChildren (vDevs) end
 --        delay = POLL_MINIMUM end                    -- yes, ask for another one soon...
 --        init = ''                                   -- ... without initialising data version
+    elseif status == 401 then
+      authentication_failure()
     else
       luup.log (log: format (status or '?', #(response or '')))
     end
@@ -1947,8 +1987,7 @@ function init (lul_device)
     luup.set_failure (0)                        -- all's well with the world
 
   else
-    luup.set_failure (2, devNo)	        -- authorisation failure
-    setVar ("DisplayLine1", 'Login required', SID.AltUI)
+    authentication_failure()
     status, comment = false, "Failed to authenticate"
   end
 
