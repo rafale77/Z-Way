@@ -553,13 +553,6 @@ SRV.HaDevice = {
       Z.zwcommand(id, inst, cc, data)
     end,
 
-    GetConfig = {
-      run = function()
-        -- do whatever you need to get the status into ZWay_ZWaveCONFIG
-        ZWay_ZWaveCONFIG = 42
-      end,
-      extra_returns = {Config = function () return ZWay_ZWaveCONFIG end}
-    },
   }
 
 
