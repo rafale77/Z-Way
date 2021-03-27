@@ -126,7 +126,7 @@ local function ZWayAPI (ip, sid)
     return async.request (build_request (url, body, response_body), -- return request status, not result
       function (_, status)
         callback (build_response (url, status, response_body))
-      end)
+    end)
   end
 
   local function HTTP_request_json (url, body)
@@ -557,10 +557,6 @@ SRV.HaDevice = {
       local id, inst = altid: match (NIaltid)
       Z.zwcommand(id, inst, cc, data)
     end,
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
   }
 
 
@@ -906,13 +902,6 @@ local CC = {   -- command class object
     end,
 
     files = { nil, SID.HaDevice },    -- device, service, json files
-  },
-
-  -- dumb switch, like ZWave.me battery switch
-  ["1"] = {
-    updater = function () end,      -- dummy stub to be assigned at end of CC table
-
-    files = { nil, SID.HaDevice },
   },
 
   -- dumb switch, like ZWave.me battery switch
