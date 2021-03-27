@@ -2,7 +2,7 @@ module (..., package.seeall)
 
 ABOUT = {
   NAME          = "L_ZWay2",
-  VERSION       = "2021.01.19",
+  VERSION       = "2021.02.09",
   DESCRIPTION   = "Z-Way interface for openLuup",
   AUTHOR        = "@akbooer",
   COPYRIGHT     = "(c) 2013-2021 AKBooer",
@@ -59,6 +59,7 @@ ABOUT = {
 --             see: https://smarthome.community/topic/171/remotec-zrc90
 -- 2020.11.24  add category_num, if not set already, when checking devices
 -- 2021.01.19  flag authorisation failure during synchronous or asynchronous requests (thanks @PerH)
+-- 2021.02.09  Added support for GetConfig
 
 
 local json    = require "rapidjson"
